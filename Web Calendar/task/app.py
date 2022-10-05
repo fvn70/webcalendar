@@ -1,11 +1,16 @@
-from flask import Flask
+import datetime
+
+from flask import Flask, jsonify
+from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Resource, Api, reqparse, inputs
+from marshmallow import Schema, fields
 import sys
 
 app = Flask(__name__)
 api = Api(app)
+db = SQLAlchemy(app)
 
-# write your code here
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///events.db'
 parser = reqparse.RequestParser()
 
 parser.add_argument(
@@ -22,21 +27,47 @@ parser.add_argument(
     required=True
 )
 
-class TodayEventGet(Resource):
+class Event(db.Model):
+    __tablename__ = 'events'
+    id = db.Column(db.Integer, primary_key=True)
+    event = db.Column(db.String(), nullable=False)
+    date = db.Column(db.Date, nullable=False)
+
+class EventSchema(Schema):
+    id = fields.Integer()
+    event = fields.String()
+    date = fields.Date()
+
+class AllEventsGet(Resource):
     def get(self):
-        return {'data': 'There are no events for today!'}
+        event_list = Event.query.all()
+        schema = EventSchema(many=True)
+        return schema.dump(event_list)
+
+class TodayEventsGet(Resource):
+    def get(self):
+        today = datetime.date.today()
+        event_list = Event.query.filter(Event.date == today)
+        schema = EventSchema(many=True)
+        return schema.dump(event_list)
 
 class TodayEventPost(Resource):
     def post(self):
         args = parser.parse_args()
-        response = {
+        res = {
             "message": "The event has been added!",
             "event": args['event'],
             "date": str(args['date'].date())
         }
-        return response
+        ev = Event(event=args["event"], date=args['date'].date())
+        db.session.add(ev)
+        db.session.commit()
+        return res
 
-api.add_resource(TodayEventGet, '/', '/event/today')
+db.create_all()
+
+api.add_resource(TodayEventsGet, '/event/today')
+api.add_resource(AllEventsGet, '/', '/event')
 api.add_resource(TodayEventPost, '/event')
 
 # do not change the way you run the program
@@ -45,4 +76,4 @@ if __name__ == '__main__':
         arg_host, arg_port = sys.argv[1].split(':')
         app.run(host=arg_host, port=arg_port)
     else:
-        app.run(debug=True)
+        app.run()

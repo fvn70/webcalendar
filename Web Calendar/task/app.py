@@ -1,6 +1,6 @@
 import datetime
 
-from flask import Flask, jsonify
+from flask import Flask, abort, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_restful import Resource, Api, reqparse, inputs
 from marshmallow import Schema, fields
@@ -44,6 +44,38 @@ class AllEventsGet(Resource):
         schema = EventSchema(many=True)
         return schema.dump(event_list)
 
+class IdEventsGet(Resource):
+    def get(self, id):
+        event = Event.query.filter(Event.id == id).first()
+        if event:
+            schema = EventSchema()
+            return schema.dump(event)
+        else:
+            abort(404, "The event doesn't exist!")
+
+    def delete(self, id):
+        event = Event.query.filter(Event.id == id).first()
+        if event:
+            db.session.delete(event)
+            db.session.commit()
+            res = {
+                "message": "The event has been deleted!"
+            }
+            return res
+        else:
+            abort(404, "The event doesn't exist!")
+
+class RangeEventsGet(Resource):
+    def get(self):
+        start = request.args.get('start_time')
+        end = request.args.get('end_time')
+        if start:
+            event_list = Event.query.filter(Event.date.between(start, end))
+        else:
+            event_list = Event.query.all()
+        schema = EventSchema(many=True)
+        return schema.dump(event_list)
+
 class TodayEventsGet(Resource):
     def get(self):
         today = datetime.date.today()
@@ -67,8 +99,10 @@ class TodayEventPost(Resource):
 db.create_all()
 
 api.add_resource(TodayEventsGet, '/event/today')
-api.add_resource(AllEventsGet, '/', '/event')
+api.add_resource(AllEventsGet, '/')
+api.add_resource(RangeEventsGet, '/event')
 api.add_resource(TodayEventPost, '/event')
+api.add_resource(IdEventsGet, '/event/<int:id>')
 
 # do not change the way you run the program
 if __name__ == '__main__':
